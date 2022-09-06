@@ -156,7 +156,7 @@ func (c *Client) Start(partitions []int) (closer func(), err error) {
 		return nil, fmt.Errorf("[AMQ-Client-%s]该客户端已启动，无法多次启动", c.node.String())
 	}
 	c.started = true
-	// 获取当前系统对当前节点的分区配置(可选)，如果配置了则只监听指定的分区，需要在/fc/base/amq/{systemId}中按照如下格式配置:{"partitions":"1,2,3"}
+	// 获取当前系统对当前节点的分区配置(可选)，如果配置了则只监听指定的分区，需要在/system/base/amq/{systemId}中按照如下格式配置:{"partitions":"1,2,3"}
 	for _, v := range partitions {
 		if v == 0 {
 			continue
