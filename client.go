@@ -1,4 +1,4 @@
-package esb
+package amq
 
 import (
 	"fmt"
@@ -11,12 +11,12 @@ import (
 	"github.com/aluka-7/utils"
 	"github.com/rs/zerolog/log"
 ) /**
- * 提供给业务系统使用和ESB进行交互的接口，允许业务系统发送消息到ESB和处理从ESB中收到的消息。每个ESB客户端
- * 都需要指定一个唯一的标示以及初始化ESB客户端所需要的配置参数(config)，配置参数的格式如下：
+ * 提供给业务系统使用和AMQ进行交互的接口，允许业务系统发送消息到AMQ和处理从AMQ中收到的消息。每个AMQ客户端
+ * 都需要指定一个唯一的标示以及初始化AMQ客户端所需要的配置参数(config)，配置参数的格式如下：
  * <pre>
  * {
- *   "provider" : "Rabbit", // ESB的提供器
- *   "parameter" : {          // ESB提供器的初始化参数，不同ESB提供所需要的初始化参数不一样
+ *   "provider" : "Rabbit", // AMQ的提供器
+ *   "parameter" : {          // AMQ提供器的初始化参数，不同AMQ提供所需要的初始化参数不一样
  *     "key1" : "value1",
  *     "key2" : "value2"
  *   },
@@ -25,9 +25,9 @@ import (
  * </pre>
  * <p>
  * 需要特别注意的是，每个系统实例化一个{@link Client}后，该实例会唯一的只监听使用该系统ID标示的一个队列，
- * 而这个队列的名称格式为：<b>sys_esb_{systemId}_{node}</b>，其中{systemId}即为当前系统的唯一四位数数字标示，
- * 而{node}则标明该客户端连接到的ESB节点。
- * 获取当前系统对当前节点的分区配置(可选)，如果配置了则只监听指定的分区，需要在/fc/base/esb/{node}中按照如下格式配置：
+ * 而这个队列的名称格式为：<b>sys_amq_{systemId}_{node}</b>，其中{systemId}即为当前系统的唯一四位数数字标示，
+ * 而{node}则标明该客户端连接到的AMQ节点。
+ * 获取当前系统对当前节点的分区配置(可选)，如果配置了则只监听指定的分区，需要在/system/base/amq/{node}中按照如下格式配置：
  * <pre>
  * {"partitions":"1,2,3"}
  * </pre>
@@ -55,7 +55,7 @@ type ClientConfig struct {
 }
 
 /**
- * 给定ESB节点的唯一标示和连接到ESB的配置来构造一个ESB客户端，如果初始化失败则抛出异常。该初始化方法会
+ * 给定amq节点的唯一标示和连接到amq的配置来构造一个amq客户端，如果初始化失败则抛出异常。该初始化方法会
  * 同步初始化对应节点的所有消息处理器并启动监听。
  *
  * @param node
@@ -65,30 +65,30 @@ type ClientConfig struct {
 func newClient(conf configuration.Configuration, systemId string, node node.Node) *Client {
 	client := &Client{conf: conf, node: node, systemId: systemId}
 	cfg := &ClientConfig{}
-	err := conf.Clazz("base", "esb", "", node.String(), cfg)
+	err := conf.Clazz("base", "amq", "", node.String(), cfg)
 	if err != nil {
-		log.Fatal("fetch esb config error")
+		log.Fatal().Msg("fetch amq config error")
 	}
 
 	client.partitions = cfg.Partitions
 
 	if client.partitions == 1 {
-		client.queueNamePattern, _ = regexp.Compile("(sys_esb_\\d{4})_(.+)")
+		client.queueNamePattern, _ = regexp.Compile("(sys_amq_\\d{4})_(.+)")
 	} else {
-		client.queueNamePattern, _ = regexp.Compile("(sys_esb_\\d{4})_(.+)_p\\d+")
+		client.queueNamePattern, _ = regexp.Compile("(sys_amq_\\d{4})_(.+)_p\\d+")
 	}
 
 	if len(cfg.Provider) > 0 {
 		read := provider.Read(cfg.Provider)
 		if read == nil {
-			log.Fatal("[ESBClient-%s]不支持的provider类型:%s", node.String(), cfg.Provider)
+			log.Fatal().Msgf("[AMQ-Client-%s]不支持的provider类型:%s", node.String(), cfg.Provider)
 			return nil
 		}
 		client.provider = read.New(node, cfg.Parameter)
 	}
 
 	client.processorMap = make(map[string]Processor, 0)
-	fmt.Printf("[ESBClient-%s]客户端初始化完成:config=%v\n", node.String(), cfg)
+	fmt.Printf("[AMQ-Client-%s]客户端初始化完成:config=%v\n", node.String(), cfg)
 	return client
 }
 
@@ -105,23 +105,23 @@ func (c *Client) AddProcessor(processors ...Processor) {
 			}
 		}
 	} else {
-		fmt.Printf("[ESBClient-%s]该客户端已启动，无法添加消息处理器\n", c.node.String())
+		fmt.Printf("[AMQ-Client-%s]该客户端已启动，无法添加消息处理器\n", c.node.String())
 	}
 }
 
 /**
- * 使用当前客户端构建一个ESB消息的目标队列名称，目标队列名称满足格式：sys_esb_{systemId}_{node}，
- * 其中{systemId}为目标系统的四位数数字ID，{node}为目标系统监听的ESB节点标示(参考{@link ESBNode}。
+ * 使用当前客户端构建一个amq消息的目标队列名称，目标队列名称满足格式：sys_amq_{systemId}_{node}，
+ * 其中{systemId}为目标系统的四位数数字ID，{node}为目标系统监听的amq节点标示(参考{@link AMQNode}。
  *
  * @param destSystemId 目标系统ID
- * @param destNode     目标ESB节点
+ * @param destNode     目标AMQ节点
  * @return
  */
 func (c *Client) BuildQueueName(systemId string) string {
 	if c.partitions > 1 {
-		log.Info("多分区节点请构建分区的队列名称")
+		log.Info().Msg("多分区节点请构建分区的队列名称")
 	}
-	return fmt.Sprintf("sys_esb_%s_%s", systemId, c.node.String())
+	return fmt.Sprintf("sys_amq_%s_%s", systemId, c.node.String())
 }
 
 /**
@@ -135,12 +135,12 @@ func (c *Client) BuildQueueName(systemId string) string {
  */
 func (c *Client) BuildQueueNameByPartition(systemId string, partition int) string {
 	if c.partitions > 1 {
-		log.Error("单分区节点请构建单分区的队列名称")
+		log.Error().Msg("单分区节点请构建单分区的队列名称")
 	}
 	if partition >= 0 && partition < c.partitions {
-		log.Error("分区编号指定错误")
+		log.Error().Msg("分区编号指定错误")
 	}
-	return fmt.Sprintf("sys_esb_%s_%s_p%d", systemId, c.node.String(), partition)
+	return fmt.Sprintf("sys_amq_%s_%s_p%d", systemId, c.node.String(), partition)
 }
 
 /**
@@ -153,10 +153,10 @@ func (c *Client) BuildQueueNameByPartition(systemId string, partition int) strin
 func (c *Client) Start(partitions []int) (closer func(), err error) {
 	// 只能被启动一次
 	if c.started {
-		return nil, fmt.Errorf("[ESBClient-%s]该客户端已启动，无法多次启动", c.node.String())
+		return nil, fmt.Errorf("[AMQ-Client-%s]该客户端已启动，无法多次启动", c.node.String())
 	}
 	c.started = true
-	// 获取当前系统对当前节点的分区配置(可选)，如果配置了则只监听指定的分区，需要在/fc/base/esb/{systemId}中按照如下格式配置:{"partitions":"1,2,3"}
+	// 获取当前系统对当前节点的分区配置(可选)，如果配置了则只监听指定的分区，需要在/fc/base/amq/{systemId}中按照如下格式配置:{"partitions":"1,2,3"}
 	for _, v := range partitions {
 		if v == 0 {
 			continue
@@ -169,29 +169,29 @@ func (c *Client) Start(partitions []int) (closer func(), err error) {
 		processor: func(genre string) Processor {
 			processor := c.processorMap[genre]
 			if processor == nil {
-				log.Error("[ESBClient-%s]未定义消息类型的处理器:%s", c.node.String(), genre)
+				log.Error().Msgf("[AMQ-Client-%s]未定义消息类型的处理器:%s", c.node.String(), genre)
 			}
 			return processor
 		},
 		node: c.node,
 	}
 
-	// 监听当前系统在ESB节点上的队列，如果有分区则按照分区分队列控制，另外，如果本地配置了启动分区编号则只监听指定的分区队列
+	// 监听当前系统在AMQ节点上的队列，如果有分区则按照分区分队列控制，另外，如果本地配置了启动分区编号则只监听指定的分区队列
 	if c.partitions == 1 {
 		queueName := c.BuildQueueName(c.systemId)
-		log.Info("[ESBClient-%s]启动监听ESB单分区消息队列:queue=%s", c.node.String(), queueName)
+		log.Info().Msgf("[AMQ-Client-%s]启动监听AMQ单分区消息队列:queue=%s", c.node.String(), queueName)
 		closer, err = c.provider.Listen(queueName, listener)
 	} else {
 		if len(partitions) == 0 {
 			for i := 0; i < c.partitions; i++ {
 				queueName := c.BuildQueueNameByPartition(c.systemId, i)
-				log.Info("[ESBClient-%s]启动监听ESB多分区消息队列:partition=%d,queue=%s", c.node.String(), i, queueName)
+				log.Info().Msgf("[AMQ-Client-%s]启动监听AMQ多分区消息队列:partition=%d,queue=%s", c.node.String(), i, queueName)
 				closer, err = c.provider.Listen(queueName, listener)
 			}
 		} else {
 			for _, v := range partitions {
 				queueName := c.BuildQueueNameByPartition(c.systemId, v)
-				log.Info("[ESBClient-%s]启动监听ESB多分区消息队列:partition=%d,queue=%s", c.node.String(), v, queueName)
+				log.Info().Msgf("[AMQ-Client-%s]启动监听AMQ多分区消息队列:partition=%d,queue=%s", c.node.String(), v, queueName)
 				closer, err = c.provider.Listen(queueName, listener)
 			}
 		}
@@ -234,11 +234,11 @@ func (c *Client) messageCheck(msg interface{}) (interface{}, error) {
 	for _, name := range nameList {
 		m := c.queueNamePattern.FindStringSubmatch(name)
 		if len(m) == 0 {
-			return nil, fmt.Errorf("ESB消息队列名称不符合规范:%s", name)
+			return nil, fmt.Errorf("AMQ消息队列名称不符合规范:%s", name)
 		} else {
 			nodeName := m[2]
 			if node.GetNode(nodeName).IsValid() != nil {
-				log.Error("ESB消息队列节点错误:%s", nodeName)
+				log.Error().Msgf("AMQ消息队列节点错误:%s", nodeName)
 			}
 		}
 	}
@@ -246,11 +246,11 @@ func (c *Client) messageCheck(msg interface{}) (interface{}, error) {
 }
 
 /**
- * 发送新消息到ESB中，这里是所有新消息的发送入口，如果发送失败则会抛出异常。请注意，消息的目标队列名称请使用
+ * 发送新消息到AMQ中，这里是所有新消息的发送入口，如果发送失败则会抛出异常。请注意，消息的目标队列名称请使用
  * 方法 {@link #buildQueueName(long, String, int)} 来构建并设置，不满足格式的目标队列名称会导致消息发送失败。
  *
  * @param message
- * @throws ESBException
+ * @throws AMQException
  */
 func (c *Client) Send(msg interface{}) error {
 	msg, err := c.messageCheck(msg)
@@ -259,7 +259,7 @@ func (c *Client) Send(msg interface{}) error {
 	}
 	// 发送消息
 	if err = c.provider.Send(msg); err == nil {
-		log.Debug("[ESBClient-%s]消息发送成功:%+v", c.node.String(), msg)
+		log.Debug().Msgf("[AMQ-Client-%s]消息发送成功:%+v", c.node.String(), msg)
 	}
 	return err
 }
@@ -272,11 +272,11 @@ func (c *Client) Close() {
 }
 
 /**
- * ESB消息的处理器接口定义，业务系统实现该接口后需要手动注册到{@link ESBClient}中去方可生效。
+ * AMQ消息的处理器接口定义，业务系统实现该接口后需要手动注册到{@link AMQClient}中去方可生效。
  */
 type Processor interface {
 	/**
-	 * 获取要处理的消息类型，对应{@link ESBMessage}中的type字段。
+	 * 获取要处理的消息类型，对应{@link AMQMessage}中的type字段。
 	 *
 	 * @return
 	 */
@@ -286,7 +286,7 @@ type Processor interface {
 	 * 接收新消息并进行处理，如果新消息为事务消息并且需要返回处理结果则请返回处理结果，否则返回Null即可。
 	 *
 	 * @param message
-	 * @throws ESBException
+	 * @throws AMQException
 	 */
 	OnReceived(msg interface{}) (*message.MsgBody, error)
 
@@ -315,26 +315,26 @@ type defaultMessageListener struct {
 }
 
 func (l *defaultMessageListener) OnReceived(msg interface{}) (*message.MsgBody, error) {
-	log.Debug("[ESBClient-%s]收到新消息:%v", l.node.String(), msg)
+	log.Debug().Msgf("[AMQ-Client-%s]收到新消息:%v", l.node.String(), msg)
 	processor := l.processor(message.GetGenre(msg))
 	if processor != nil {
 		return processor.OnReceived(msg)
 	} else {
-		return nil, fmt.Errorf("此类型ESB消息的处理器接口定义:无")
+		return nil, fmt.Errorf("此类型AMQ消息的处理器接口定义:无")
 	}
 }
 
 func (l *defaultMessageListener) OnRecipientAckReceived(genre, msgId string, rsp *message.MsgBody) (*message.MsgBody, error) {
-	log.Debug("[ESBClient-%s]收到接收方应答消息：type=%s,msgId=%s,rsp=%v", l.node.String(), genre, msgId, rsp)
+	log.Debug().Msgf("[AMQ-Client-%s]收到接收方应答消息：type=%s,msgId=%s,rsp=%v", l.node.String(), genre, msgId, rsp)
 	processor := l.processor(genre)
 	if processor != nil {
 		return processor.OnRecipientAckReceived(msgId, rsp)
 	} else {
-		return nil, fmt.Errorf("此类型ESB消息的处理器接口定义:无")
+		return nil, fmt.Errorf("此类型AMQ消息的处理器接口定义:无")
 	}
 }
 func (l *defaultMessageListener) OnSenderAckReceived(genre, msgId string, rsp *message.MsgBody) error {
-	log.Debug("[ESBClient-%s]收到发送方应答消息:type=%s,msgId=%s,rsp=%v", l.node.String(), genre, msgId, rsp)
+	log.Debug().Msgf("[AMQ-Client-%s]收到发送方应答消息:type=%s,msgId=%s,rsp=%v", l.node.String(), genre, msgId, rsp)
 	processor := l.processor(genre)
 	if processor != nil {
 		return processor.OnSenderAckReceived(msgId, rsp)

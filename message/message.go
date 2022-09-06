@@ -11,7 +11,7 @@ import (
 )
 
 /**
- * ESB消息的类型。
+ * AMQ消息的类型。
  */
 type _MessageCategory string
 
@@ -38,8 +38,7 @@ const (
 )
 
 /**
- * ESB事务消息的阶段定义。
- *
+ * AMQ事务消息的阶段定义。
  */
 type _MessagePhase string
 
@@ -66,7 +65,7 @@ const (
 )
 
 /**
- * 每条ESB消息的唯一ID标示对象。
+ * 每条AMQ消息的唯一ID标示对象。
  */
 type msgId struct {
 	msgId string
@@ -89,7 +88,7 @@ func (mid msgId) Id() string {
 }
 
 /**
- * ESB消息体封装，提供流式操作。
+ * AMQ消息体封装，提供流式操作。
  */
 type MsgBody struct {
 	Body map[string]string `json:"body"`
@@ -130,8 +129,8 @@ func (mb *MsgBody) GetFloat(key string) float64 {
 }
 
 /**
-输出ESB消息体内容
-*/
+ * 输出AMQ消息体内容
+ */
 func (mb *MsgBody) ToString() string {
 	size := len(mb.Body)
 	if size == 0 {
@@ -159,13 +158,12 @@ func (mb *MsgBody) ToString() string {
 }
 
 /**
- * 所有ESB消息的基类，业务系统根据情况可选择发送如下几类消息：
+ * 所有AMQ消息的基类，业务系统根据情况可选择发送如下几类消息：
  * <ul>
  * <li>{@link NoticeMessage}：通知类消息；</li>
  * <li>{@link SimplexMessage}：单向事务消息；</li>
  * <li>{@link DuplexMessage}：双向事务消息；</li>
  * </ul>
-
  */
 type Message struct {
 	genre string
@@ -204,8 +202,7 @@ func (m *Message) SetBody(body *MsgBody) {
 }
 
 /**
- * 发送到ESB的通知类消息，通知类消息只保证被正确投递到ESB队列中，不保证接收方是否处理成功。
- *
+ * 发送到AMQ的通知类消息，通知类消息只保证被正确投递到AMQ队列中，不保证接收方是否处理成功。
  */
 type NoticeMessage struct {
 	Message
@@ -247,8 +244,7 @@ func NewDuplexMessage(msgId string) *DuplexMessage {
 }
 
 /**
- * 发送到ESB中去的消息的封装，对通知消息和事务消息进行统一封装。
- *
+ * 发送到AMQ中去的消息的封装，对通知消息和事务消息进行统一封装。
  */
 type MsgPayload struct {
 	Category    _MessageCategory `json:"category"`    // 消息分类
@@ -272,7 +268,7 @@ func (mpl *MsgPayload) SetSign(sign string) {
 func (mpl *MsgPayload) ConvertToNotice() (*NoticeMessage, error) {
 	msg := NewNoticeMessage(mpl.MsgId)
 	if mpl.Category != NOTICE {
-		return msg, fmt.Errorf("非通知类ESB消息")
+		return msg, fmt.Errorf("非通知类AMQ消息")
 	}
 	msg.genre = mpl.Genre
 	msg.Body = mpl.Body
@@ -282,7 +278,7 @@ func (mpl *MsgPayload) ConvertToNotice() (*NoticeMessage, error) {
 func (mpl *MsgPayload) ConvertToSimplex() (*SimplexMessage, error) {
 	msg := NewSimplexMessage(mpl.MsgId)
 	if mpl.Category != SIMPLEX {
-		return msg, fmt.Errorf("非单向事务ESB消息")
+		return msg, fmt.Errorf("非单向事务AMQ消息")
 	}
 	msg.genre = mpl.Genre
 	msg.Body = mpl.Body
@@ -293,7 +289,7 @@ func (mpl *MsgPayload) ConvertToSimplex() (*SimplexMessage, error) {
 func (mpl *MsgPayload) ConvertToDuplex() (*DuplexMessage, error) {
 	msg := NewDuplexMessage(mpl.MsgId)
 	if mpl.Category != DUPLEX {
-		return msg, fmt.Errorf("非双向事务ESB消息")
+		return msg, fmt.Errorf("非双向事务AMQ消息")
 	}
 	msg.genre = mpl.Genre
 	msg.Body = mpl.Body

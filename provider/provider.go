@@ -8,13 +8,13 @@ import (
 )
 
 /**
- * 企业服务总线（ESB）的客户端接口，通过ESB实现系统解耦并实现系统之间的交互需求，目前支持的系统交互有如下几类：
+ * 企业服务总线（AMQ）的客户端接口，通过AMQ实现系统解耦并实现系统之间的交互需求，目前支持的系统交互有如下几类：
  *
  * 消息通知：发送方单纯的发出通知给接收方，不对接收方的处理结果进行响应；
  * 单向事务：发送方发出请求给接收方，等待接收方反馈处理结果（成功或失败）后进行处理；
  * 双向事务：发送方发出请求给接收方，等待接收方处理结果后，再次通知接收方我方的处理结果；
  *
- * 基于上述交互需求，所选择的ESB中间件要满足如下条件：
+ * 基于上述交互需求，所选择的AMQ中间件要满足如下条件：
  *
  * 消息的顺序性：发送方发出的消息顺序和接收方接收到的消息顺序要一致；
  * 唯一消费保证：同一个消息队列中的消息只能被一个消费者消费；
@@ -29,10 +29,10 @@ func Register(name string, provider Provider) {
 	providersMu.Lock()
 	defer providersMu.Unlock()
 	if provider == nil {
-		panic("esb: Register provider is nil")
+		panic("amq: Register provider is nil")
 	}
 	if _, dup := providers[name]; dup {
-		panic("esb: Register called twice for provider " + name)
+		panic("amq: Register called twice for provider " + name)
 	}
 	providers[name] = provider
 }
@@ -62,11 +62,11 @@ type Provider interface {
 	Cancel(name string)
 
 	/**
-	 * 发送ESB消息，可根据业务需求发送三类消息：
+	 * 发送AMQ消息，可根据业务需求发送三类消息：
 	 * <ul>
-	 * <li>{@link ESBNoticeMessage}：通知类消息，只保证消息被成功发送到ESB中。</li>
-	 * <li>{@link ESBSimplexMessage}：单向事务消息，通过收到接收方的确认消息来完成事务。</li>
-	 * <li>{@link ESBDuplexMessage}：双向事务消息，通过接收方和发送方各分别确认来完对应的事务。</li>
+	 * <li>{@link AMQNoticeMessage}：通知类消息，只保证消息被成功发送到AMQ中。</li>
+	 * <li>{@link AMQSimplexMessage}：单向事务消息，通过收到接收方的确认消息来完成事务。</li>
+	 * <li>{@link AMQDuplexMessage}：双向事务消息，通过接收方和发送方各分别确认来完对应的事务。</li>
 	 * </ul>
 	 *
 	 * @param message
@@ -81,7 +81,7 @@ type Provider interface {
 }
 
 /**
- * ESB消息的监听器接口定义。
+ * AMQ消息的监听器接口定义。
  */
 type MessageListener interface {
 	/**
@@ -89,7 +89,7 @@ type MessageListener interface {
 	 *
 	 * @param message
 	 * @return
-	 * @throws ESBException
+	 * @throws AMQException
 	 */
 	OnReceived(msg interface{}) (*message.MsgBody, error)
 	/**
@@ -100,7 +100,7 @@ type MessageListener interface {
 	 * @param msgId 事务消息的唯一ID
 	 * @param rsp   接收方返回的应答消息
 	 * @return
-	 * @throws ESBException
+	 * @throws AMQException
 	 */
 	OnRecipientAckReceived(genre, msgId string, rsp *message.MsgBody) (*message.MsgBody, error)
 
@@ -110,7 +110,7 @@ type MessageListener interface {
 	 * @param type  消息类型
 	 * @param msgId 事务消息的唯一ID
 	 * @param rsp   发送方返回的应答消息
-	 * @throws ESBException
+	 * @throws AMQException
 	 */
 	OnSenderAckReceived(genre, msgId string, rsp *message.MsgBody) error
 }

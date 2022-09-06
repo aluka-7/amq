@@ -1,10 +1,10 @@
-package esb
+package amq
 
 import (
 	"fmt"
 
-	"git.forchange.cn/base/esb/message"
-	"git.forchange.cn/base/esb/provider"
+	"github.com/aluka-7/amq/message"
+	"github.com/aluka-7/amq/provider"
 )
 
 /**
@@ -12,7 +12,7 @@ import (
  *
  * @param message
  * @param listener
- * @throws ESBException
+ * @throws AMQException
  */
 func HandleNew(msg *message.MsgPayload, listener provider.MessageListener) (*message.MsgPayload, error) {
 	if msg.Category == message.NOTICE {
@@ -31,7 +31,7 @@ func HandleNew(msg *message.MsgPayload, listener provider.MessageListener) (*mes
  *
  * @param message
  * @param listener
- * @throws ESBException
+ * @throws AMQException
  */
 func HandleAck(msg *message.MsgPayload, listener provider.MessageListener) (*message.MsgPayload, error) {
 	if msg.Category == message.SIMPLEX {
